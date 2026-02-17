@@ -17,7 +17,7 @@ else:
 
 # --- OAuth Redirect URI ---
 if IS_PRODUCTION:
-    REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://your-app.onrender.com/auth/callback")
+    REDIRECT_URI = os.environ.get("REDIRECT_URI", "https://videoupload-t3vi.onrender.com/auth/callback")
 else:
     REDIRECT_URI = "http://localhost:5000/auth/callback"
 

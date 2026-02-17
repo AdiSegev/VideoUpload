@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: youtube-uploader
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: REDIRECT_URI
+        value: https://youtube-uploader.onrender.com/auth/callback
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false  # Set manually in Render dashboard
+      - key: PYTHON_VERSION
+        value: "3.11"

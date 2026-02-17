@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+venv/
+.env
+token.json
+client_secret*.json
+*.mp4
+*.avi
+*.mkv
+*.mov
+uploads/
+uploads/frames/

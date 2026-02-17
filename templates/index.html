@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YouTube Video Uploader</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <div class="logo">
+                    <div class="logo-icon">
+                        <svg viewBox="0 0 24 24" fill="currentColor">
+                            <path
+                                d="M19.615 3.184c-3.604-.246-11.631-.245-15.23 0C.488 3.45.029 5.804 0 12c.029 6.185.484 8.549 4.385 8.816 3.6.245 11.626.246 15.23 0C23.512 20.55 23.971 18.196 24 12c-.029-6.185-.484-8.549-4.385-8.816zM9 16V8l8 4-8 4z" />
+                        </svg>
+                    </div>
+                    <h1>YouTube Uploader</h1>
+                </div>
+                <div class="auth-section">
+                    {% if authenticated %}
+                    <span class="auth-status connected">
+                        <span class="status-dot"></span>
+                        מחובר
+                    </span>
+                    <a href="/auth/logout" class="btn btn-ghost">התנתק</a>
+                    {% else %}
+                    <a href="/auth" class="btn btn-primary btn-auth">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                            <path
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"
+                                fill="#4285F4" />
+                            <path
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                                fill="#34A853" />
+                            <path
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                                fill="#FBBC05" />
+                            <path
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                                fill="#EA4335" />
+                        </svg>
+                        התחבר עם Google
+                    </a>
+                    {% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            {% if not authenticated %}
+            <div class="auth-prompt">
+                <div class="auth-prompt-icon">🔐</div>
+                <h2>יש להתחבר לחשבון Google</h2>
+                <p>כדי להעלות סרטונים לערוץ שלך, יש להתחבר עם חשבון Google המקושר לערוץ YouTube.</p>
+                <a href="/auth" class="btn btn-primary btn-lg">
+                    התחבר עם Google
+                </a>
+            </div>
+            {% else %}
+            <form id="uploadForm" class="upload-form" enctype="multipart/form-data">
+                <div class="form-grid">
+                    <!-- Left Column - Files -->
+                    <div class="form-column">
+                        <!-- Video File -->
+                        <div class="form-section">
+                            <h3 class="section-title">
+                                <span class="section-icon">🎬</span>
+                                קובץ וידאו
+                            </h3>
+                            <div class="drop-zone" id="videoDropZone">
+                                <input type="file" name="video" id="videoInput" accept="video/*" required hidden>
+                                <div class="drop-zone-content" id="videoDropContent">
+                                    <div class="drop-icon">📁</div>
+                                    <p class="drop-text">גרור קובץ וידאו לכאן</p>
+                                    <p class="drop-subtext">או לחץ לבחירת קובץ</p>
+                                    <span class="drop-formats">MP4, AVI, MOV, MKV, WMV</span>
+                                </div>
+                                <div class="file-preview" id="videoPreview" style="display:none;">
+                                    <div class="file-info">
+                                        <span class="file-icon">🎥</span>
+                                        <div>
+                                            <p class="file-name" id="videoFileName"></p>
+                                            <p class="file-size" id="videoFileSize"></p>
+                                        </div>
+                                    </div>
+                                    <button type="button" class="btn-remove" id="removeVideo">✕</button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Thumbnail -->
+                        <div class="form-section">
+                            <h3 class="section-title">
+                                <span class="section-icon">🖼️</span>
+                                תמונת תצוגה (Thumbnail)
+                            </h3>
+                            <div class="drop-zone drop-zone-small" id="thumbDropZone">
+                                <input type="file" name="thumbnail" id="thumbInput" accept="image/jpeg,image/png"
+                                    hidden>
+                                <input type="hidden" name="selected_frame_path" id="selectedFramePath">
+                                <div class="drop-zone-content" id="thumbDropContent">
+                                    <div class="drop-icon small">🖼️</div>
+                                    <p class="drop-text">בחר תמונת תצוגה</p>
+                                    <span class="drop-formats">JPEG, PNG (מקסימום 2MB)</span>
+                                </div>
+                                <div class="thumb-preview" id="thumbPreview" style="display:none;">
+                                    <img id="thumbImage" src="" alt="Thumbnail preview">
+                                    <button type="button" class="btn-remove" id="removeThumb">✕</button>
+                                </div>
+                            </div>
+
+                            <!-- Auto-generate from video -->
+                            <button type="button" class="btn btn-generate-frames" id="generateFramesBtn">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                                    <path
+                                        d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9h-4v4h-2v-4H9V9h4V5h2v4h4v2z" />
+                                </svg>
+                                צור Thumbnail מהסרטון
+                            </button>
+
+                            <!-- Loading spinner -->
+                            <div class="frames-loading" id="framesLoading" style="display:none;">
+                                <div class="spinner"></div>
+                                <span>מחלץ פריימים מהסרטון...</span>
+                            </div>
+
+                            <!-- Frame picker grid -->
+                            <div class="frames-grid" id="framesGrid" style="display:none;">
+                                <p class="frames-label">בחר תמונה מתוך הסרטון:</p>
+                                <div class="frames-list" id="framesList"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Right Column - Details -->
+                    <div class="form-column">
+                        <!-- Basic Info -->
+                        <div class="form-section">
+                            <h3 class="section-title">
+                                <span class="section-icon">📝</span>
+                                פרטי הסרטון
+                            </h3>
+
+                            <div class="form-group">
+                                <label for="title">כותרת <span class="required">*</span></label>
+                                <input type="text" name="title" id="title" required placeholder="הזן את כותרת הסרטון..."
+                                    maxlength="100">
+                                <div class="char-count"><span id="titleCount">0</span>/100</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="description">תיאור</label>
+                                <textarea name="description" id="description" rows="5"
+                                    placeholder="הוסף תיאור לסרטון..." maxlength="5000"></textarea>
+                                <div class="char-count"><span id="descCount">0</span>/5000</div>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="tags">תגיות</label>
+                                <input type="text" name="tags" id="tags"
+                                    placeholder="הפרד תגיות בפסיקים: תגית1, תגית2, תגית3">
+                            </div>
+                        </div>
+
+                        <!-- Settings -->
+                        <div class="form-section">
+                            <h3 class="section-title">
+                                <span class="section-icon">⚙️</span>
+                                הגדרות
+                            </h3>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="category_id">קטגוריה</label>
+                                    <select name="category_id" id="category_id">
+                                        {% for id, name in categories.items() %}
+                                        <option value="{{ id }}" {% if id=='22' %}selected{% endif %}>{{ name }}
+                                        </option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="privacy_status">פרטיות</label>
+                                    <select name="privacy_status" id="privacy_status">
+                                        <option value="private">פרטי (Private)</option>
+                                        <option value="unlisted">לא רשום (Unlisted)</option>
+                                        <option value="public">ציבורי (Public)</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div class="form-row">
+                                <div class="form-group">
+                                    <label for="default_language">שפה</label>
+                                    <select name="default_language" id="default_language">
+                                        <option value="">לא מוגדר</option>
+                                        <option value="he">עברית</option>
+                                        <option value="en">English</option>
+                                        <option value="ar">العربية</option>
+                                        <option value="fr">Français</option>
+                                        <option value="es">Español</option>
+                                        <option value="de">Deutsch</option>
+                                        <option value="ru">Русский</option>
+                                    </select>
+                                </div>
+
+                                <div class="form-group">
+                                    <label for="license">רישיון</label>
+                                    <select name="license" id="license">
+                                        <option value="youtube">YouTube Standard</option>
+                                        <option value="creativeCommon">Creative Commons</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <!-- Schedule -->
+                            <div class="form-group">
+                                <label for="publish_at">תזמון פרסום (אופציונלי)</label>
+                                <input type="datetime-local" name="publish_at" id="publish_at">
+                                <p class="form-hint">השאר ריק לפרסום מיידי לפי הגדרת הפרטיות</p>
+                            </div>
+
+                            <!-- Made for Kids -->
+                            <div class="form-group">
+                                <label class="toggle-label">
+                                    <span>מיועד לילדים</span>
+                                    <div class="toggle-switch">
+                                        <input type="checkbox" name="made_for_kids" id="made_for_kids" value="true">
+                                        <span class="toggle-slider"></span>
+                                    </div>
+                                </label>
+                                <p class="form-hint">בהתאם לחוק COPPA - השפעה על המלצות ותגובות</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Button -->
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-upload" id="uploadBtn">
+                        <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                            <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
+                        </svg>
+                        <span>העלה סרטון</span>
+                    </button>
+                </div>
+
+                <!-- Progress -->
+                <div class="progress-container" id="progressContainer" style="display:none;">
+                    <div class="progress-header">
+                        <span class="progress-label" id="progressLabel">מעלה...</span>
+                        <span class="progress-percent" id="progressPercent">0%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressFill"></div>
+                    </div>
+                </div>
+
+                <!-- Result -->
+                <div class="result-container" id="resultContainer" style="display:none;">
+                </div>
+            </form>
+            {% endif %}
+        </main>
+    </div>
+
+    <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+
+</html>

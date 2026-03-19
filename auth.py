@@ -97,6 +97,14 @@ def _save_credentials(credentials):
     config.save_token_data(token_data)
 
 
+def get_access_token():
+    """Return a fresh access token string for client-side use."""
+    creds = get_credentials()
+    if not creds:
+        return None
+    return creds.token
+
+
 def is_authenticated():
     """Check if we have valid credentials."""
     creds = get_credentials()

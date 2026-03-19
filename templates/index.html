@@ -67,7 +67,7 @@
                 </a>
             </div>
             {% else %}
-            <form id="uploadForm" class="upload-form" enctype="multipart/form-data">
+            <form id="uploadForm" class="upload-form">
                 <div class="form-grid">
                     <!-- Left Column - Files -->
                     <div class="form-column">
@@ -107,7 +107,6 @@
                             <div class="drop-zone drop-zone-small" id="thumbDropZone">
                                 <input type="file" name="thumbnail" id="thumbInput" accept="image/jpeg,image/png"
                                     hidden>
-                                <input type="hidden" name="selected_frame_path" id="selectedFramePath">
                                 <div class="drop-zone-content" id="thumbDropContent">
                                     <div class="drop-icon small">🖼️</div>
                                     <p class="drop-text">בחר תמונת תצוגה</p>
@@ -184,7 +183,7 @@
                                     <label for="category_id">קטגוריה</label>
                                     <select name="category_id" id="category_id">
                                         {% for id, name in categories.items() %}
-                                        <option value="{{ id }}" {% if id=='22' %}selected{% endif %}>{{ name }}
+                                        <option value="{{ id }}" {% if id=='27' %}selected{% endif %}>{{ name }}
                                         </option>
                                         {% endfor %}
                                     </select>
@@ -205,7 +204,7 @@
                                     <label for="default_language">שפה</label>
                                     <select name="default_language" id="default_language">
                                         <option value="">לא מוגדר</option>
-                                        <option value="he">עברית</option>
+                                        <option value="he" selected>עברית</option>
                                         <option value="en">English</option>
                                         <option value="ar">العربية</option>
                                         <option value="fr">Français</option>
@@ -246,13 +245,16 @@
                     </div>
                 </div>
 
-                <!-- Upload Button -->
                 <div class="form-actions">
                     <button type="submit" class="btn btn-upload" id="uploadBtn">
                         <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
                             <path d="M9 16h6v-6h4l-7-7-7 7h4v6zm-4 2h14v2H5v-2z" />
                         </svg>
                         <span>העלה סרטון</span>
+                    </button>
+                    <button type="button" class="btn btn-upload" id="newUploadBtn" style="display:none;">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        <span>העלה סרטון חדש</span>
                     </button>
                 </div>
 

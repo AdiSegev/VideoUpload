@@ -79,6 +79,90 @@ def logout():
     return redirect("/")
 
 
+@app.route("/api/create-upload", methods=["POST"])
+def create_upload_session():
+    """
+    Proxy: Create a resumable upload session on YouTube.
+    Receives video metadata JSON, returns the upload URL.
+    This avoids CORS issues with the YouTube API.
+    """
+    import requests as http_requests
+
+    token = auth.get_access_token()
+    if not token:
+        return jsonify({"error": "לא מחובר. יש להתחבר קודם ל-Google."}), 401
+
+    metadata = request.get_json()
+    if not metadata:
+        return jsonify({"error": "חסר metadata."}), 400
+
+    try:
+        resp = http_requests.post(
+            "https://www.googleapis.com/upload/youtube/v3/videos",
+            params={"uploadType": "resumable", "part": "snippet,status"},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json; charset=UTF-8",
+                "X-Upload-Content-Type": "video/*",
+            },
+            json=metadata,
+        )
+
+        if resp.status_code != 200:
+            error_msg = resp.json().get("error", {}).get("message", f"שגיאה ({resp.status_code})")
+            return jsonify({"error": error_msg}), resp.status_code
+
+        upload_url = resp.headers.get("Location")
+        if not upload_url:
+            return jsonify({"error": "לא התקבל URL להעלאה מ-YouTube."}), 500
+
+        return jsonify({"upload_url": upload_url, "access_token": token})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/set-thumbnail", methods=["POST"])
+def set_thumbnail():
+    """
+    Proxy: Upload a thumbnail image to YouTube.
+    Small file (max 2MB), no timeout risk.
+    """
+    import requests as http_requests
+
+    token = auth.get_access_token()
+    if not token:
+        return jsonify({"error": "לא מחובר. יש להתחבר קודם ל-Google."}), 401
+
+    video_id = request.args.get("videoId")
+    if not video_id:
+        return jsonify({"error": "חסר videoId."}), 400
+
+    if "thumbnail" not in request.files:
+        return jsonify({"error": "חסר קובץ thumbnail."}), 400
+
+    thumb_file = request.files["thumbnail"]
+
+    try:
+        resp = http_requests.post(
+            f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+            params={"videoId": video_id, "uploadType": "media"},
+            headers={
+                "Authorization": f"Bearer {token}",
+                "Content-Type": thumb_file.content_type,
+            },
+            data=thumb_file.read(),
+        )
+
+        if not resp.ok:
+            error_msg = resp.json().get("error", {}).get("message", f"שגיאה ({resp.status_code})")
+            return jsonify({"error": error_msg}), resp.status_code
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 if __name__ == "__main__":
     # Allow HTTP for local OAuth (development only)

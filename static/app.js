@@ -275,35 +275,27 @@ document.addEventListener('DOMContentLoaded', () => {
         setProgress(0, 'מקבל הרשאות...');
 
         try {
-            // 1. Get access token from our server
-            const tokenRes = await fetch('/auth/token');
-            const tokenData = await tokenRes.json();
-            if (!tokenRes.ok) {
-                throw new Error(tokenData.error || 'שגיאה בקבלת הרשאות');
-            }
-            const accessToken = tokenData.access_token;
-
             setProgress(2, 'יוצר סשן העלאה...');
 
-            // 2. Build video metadata
+            // 1. Build video metadata
             const metadata = buildVideoMetadata();
 
-            // 3. Create resumable upload session
-            const uploadUrl = await createResumableUpload(accessToken, metadata);
+            // 2. Create resumable upload session via our server (avoids CORS)
+            const { uploadUrl, accessToken } = await createResumableUpload(metadata);
 
             setProgress(5, 'מעלה סרטון ל-YouTube...');
 
-            // 4. Upload the file in chunks with progress
+            // 3. Upload the file in chunks with progress (direct to YouTube)
             const videoId = await uploadFileResumable(accessToken, uploadUrl, videoFile);
 
             setProgress(95, 'מגדיר תמונת תצוגה...');
 
-            // 5. Set thumbnail if provided (file input or extracted frame)
+            // 4. Set thumbnail if provided (file input or extracted frame)
             let thumbnailError = null;
             const thumbFile = thumbInput.files[0] || (selectedFrameBlob ? new File([selectedFrameBlob], 'thumbnail.jpg', { type: 'image/jpeg' }) : null);
             if (thumbFile) {
                 try {
-                    await uploadThumbnail(accessToken, videoId, thumbFile);
+                    await uploadThumbnail(videoId, thumbFile);
                 } catch (err) {
                     thumbnailError = err.message;
                 }
@@ -377,34 +369,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Create a resumable upload session on YouTube.
-     * Returns the upload URL for sending file data.
+     * Create a resumable upload session via our server proxy.
+     * Returns { uploadUrl, accessToken }.
      */
-    async function createResumableUpload(accessToken, metadata) {
-        const response = await fetch(
-            'https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json; charset=UTF-8',
-                },
-                body: JSON.stringify(metadata),
-            }
-        );
+    async function createResumableUpload(metadata) {
+        const response = await fetch('/api/create-upload', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(metadata),
+        });
 
+        const data = await response.json();
         if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            const errMsg = errData?.error?.message || `שגיאה ביצירת סשן העלאה (${response.status})`;
-            throw new Error(errMsg);
+            throw new Error(data.error || `שגיאה ביצירת סשן העלאה (${response.status})`);
         }
 
-        const uploadUrl = response.headers.get('Location');
-        if (!uploadUrl) {
-            throw new Error('לא התקבל URL להעלאה מ-YouTube');
-        }
-
-        return uploadUrl;
+        return { uploadUrl: data.upload_url, accessToken: data.access_token };
     }
 
     /**
@@ -500,24 +480,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     /**
-     * Upload a thumbnail image directly to YouTube API.
+     * Upload a thumbnail image via our server proxy.
      */
-    async function uploadThumbnail(accessToken, videoId, thumbFile) {
-        const response = await fetch(
-            `https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId=${videoId}&uploadType=media`,
-            {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': thumbFile.type,
-                },
-                body: thumbFile,
-            }
-        );
+    async function uploadThumbnail(videoId, thumbFile) {
+        const formData = new FormData();
+        formData.append('thumbnail', thumbFile);
+
+        const response = await fetch(`/api/set-thumbnail?videoId=${videoId}`, {
+            method: 'POST',
+            body: formData,
+        });
 
         if (!response.ok) {
-            const errData = await response.json().catch(() => ({}));
-            throw new Error(errData?.error?.message || 'שגיאה בהעלאת תמונת תצוגה');
+            const data = await response.json().catch(() => ({}));
+            throw new Error(data.error || 'שגיאה בהעלאת תמונת תצוגה');
         }
     }
 

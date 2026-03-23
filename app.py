@@ -97,6 +97,9 @@ def create_upload_session():
         return jsonify({"error": "חסר metadata."}), 400
 
     try:
+        # Forward the browser's Origin so YouTube enables CORS on the upload URL
+        browser_origin = request.headers.get("Origin", "")
+
         resp = http_requests.post(
             "https://www.googleapis.com/upload/youtube/v3/videos",
             params={"uploadType": "resumable", "part": "snippet,status"},
@@ -104,6 +107,7 @@ def create_upload_session():
                 "Authorization": f"Bearer {token}",
                 "Content-Type": "application/json; charset=UTF-8",
                 "X-Upload-Content-Type": "video/*",
+                "Origin": browser_origin,
             },
             json=metadata,
         )

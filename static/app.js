@@ -393,57 +393,144 @@ document.addEventListener('DOMContentLoaded', () => {
      * Returns the video ID.
      */
     async function uploadFileResumable(accessToken, uploadUrl, file) {
-        const CHUNK_SIZE = 10 * 1024 * 1024; // 10MB
+        const CHUNK_SIZE = 50 * 1024 * 1024; // 50MB chunks
+        const MAX_RETRIES = 3;
+        let currentToken = accessToken;
 
-        // For files smaller than 10MB, upload in a single request
+        // For files smaller than chunk size, upload in a single request
         if (file.size <= CHUNK_SIZE) {
-            const response = await uploadWithProgress(uploadUrl, accessToken, file, 0, file.size, file.size);
-            const data = await response.json();
-            if (!response.ok) {
-                throw new Error(data?.error?.message || 'שגיאה בהעלאת הסרטון');
+            const response = await uploadWithProgress(uploadUrl, currentToken, file, 0, file.size, file.size);
+            if (response.status === 401) {
+                currentToken = await refreshToken();
+                const retry = await uploadWithProgress(uploadUrl, currentToken, file, 0, file.size, file.size);
+                const data = await retry.json();
+                if (!retry.ok) throw new Error(data?.error?.message || 'שגיאה בהעלאת הסרטון');
+                return data.id;
             }
+            const data = await response.json();
+            if (!response.ok) throw new Error(data?.error?.message || 'שגיאה בהעלאת הסרטון');
             return data.id;
         }
 
-        // Chunked upload for large files
+        // Chunked upload for large files with retry
         let start = 0;
-        let response;
 
         while (start < file.size) {
             const end = Math.min(start + CHUNK_SIZE, file.size);
             const chunk = file.slice(start, end);
+            let success = false;
 
-            response = await fetch(uploadUrl, {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Range': `bytes ${start}-${end - 1}/${file.size}`,
-                },
-                body: chunk,
-            });
+            for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+                try {
+                    const response = await fetch(uploadUrl, {
+                        method: 'PUT',
+                        headers: {
+                            'Authorization': `Bearer ${currentToken}`,
+                            'Content-Range': `bytes ${start}-${end - 1}/${file.size}`,
+                        },
+                        body: chunk,
+                    });
 
-            if (response.status === 308) {
-                // Chunk accepted, continue
-                start = end;
-                const percent = 5 + Math.round((start / file.size) * 88); // 5%-93% range
-                setProgress(percent, `מעלה סרטון... ${formatFileSize(start)} / ${formatFileSize(file.size)}`);
-            } else if (response.ok) {
-                // Upload complete
-                const data = await response.json();
-                return data.id;
-            } else {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData?.error?.message || `שגיאה בהעלאת צ'אנק (${response.status})`);
+                    if (response.status === 401) {
+                        // Token expired - refresh and retry
+                        setProgress(null, 'מרענן הרשאות...');
+                        currentToken = await refreshToken();
+                        continue;
+                    }
+
+                    if (response.status === 308) {
+                        // Chunk accepted, continue to next
+                        start = end;
+                        const percent = 5 + Math.round((start / file.size) * 88);
+                        setProgress(percent, `מעלה סרטון... ${formatFileSize(start)} / ${formatFileSize(file.size)}`);
+                        success = true;
+                        break;
+                    }
+
+                    if (response.ok) {
+                        // Upload complete (last chunk)
+                        const data = await response.json();
+                        return data.id;
+                    }
+
+                    // Other error
+                    if (attempt < MAX_RETRIES - 1) {
+                        const waitMs = 1000 * Math.pow(2, attempt); // 1s, 2s, 4s
+                        setProgress(null, `שגיאה, מנסה שוב בעוד ${waitMs / 1000} שניות...`);
+                        await sleep(waitMs);
+
+                        // Check where YouTube thinks we are
+                        const resumePos = await getResumePosition(uploadUrl, currentToken, file.size);
+                        if (resumePos !== null) start = resumePos;
+                        continue;
+                    }
+
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData?.error?.message || `שגיאה בהעלאת צ'אנק (${response.status})`);
+
+                } catch (err) {
+                    if (err.message && !err.message.includes('שגיאה בהעלאת')) {
+                        // Network error
+                        if (attempt < MAX_RETRIES - 1) {
+                            const waitMs = 1000 * Math.pow(2, attempt);
+                            setProgress(null, `שגיאת רשת, מנסה שוב בעוד ${waitMs / 1000} שניות...`);
+                            await sleep(waitMs);
+                            continue;
+                        }
+                    }
+                    throw err;
+                }
+            }
+
+            if (!success && start < file.size) {
+                throw new Error('ההעלאה נכשלה לאחר מספר ניסיונות');
             }
         }
 
-        // After last chunk, response should be 200
-        if (response && response.ok) {
-            const data = await response.json();
-            return data.id;
-        }
-
         throw new Error('העלאה הסתיימה אבל לא התקבל אישור מ-YouTube');
+    }
+
+    /**
+     * Refresh the access token from our server.
+     */
+    async function refreshToken() {
+        const res = await fetch('/auth/token');
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || 'שגיאה ברענון הרשאות');
+        return data.access_token;
+    }
+
+    /**
+     * Query YouTube for the last uploaded byte (resume position).
+     */
+    async function getResumePosition(uploadUrl, accessToken, totalSize) {
+        try {
+            const resp = await fetch(uploadUrl, {
+                method: 'PUT',
+                headers: {
+                    'Authorization': `Bearer ${accessToken}`,
+                    'Content-Range': `bytes */${totalSize}`,
+                },
+            });
+            if (resp.status === 308) {
+                const range = resp.headers.get('Range');
+                if (range) {
+                    // Range header format: "bytes=0-12345"
+                    const match = range.match(/bytes=0-(\d+)/);
+                    if (match) return parseInt(match[1]) + 1;
+                }
+            }
+        } catch (e) {
+            // Ignore errors, caller will use current position
+        }
+        return null;
+    }
+
+    /**
+     * Sleep helper.
+     */
+    function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**

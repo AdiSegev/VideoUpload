@@ -148,6 +148,7 @@ def set_thumbnail():
     thumb_file = request.files["thumbnail"]
 
     try:
+        content = thumb_file.read()
         resp = http_requests.post(
             f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
             params={"videoId": video_id, "uploadType": "media"},
@@ -155,8 +156,29 @@ def set_thumbnail():
                 "Authorization": f"Bearer {token}",
                 "Content-Type": thumb_file.content_type,
             },
-            data=thumb_file.read(),
+            data=content,
         )
+
+        # If token expired during upload, refresh and retry once
+        if resp.status_code == 401:
+            creds = auth.get_credentials()
+            if creds:
+                from google.auth.transport.requests import Request
+                try:
+                    creds.refresh(Request())
+                    auth._save_credentials(creds)
+                    token = creds.token
+                    resp = http_requests.post(
+                        f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+                        params={"videoId": video_id, "uploadType": "media"},
+                        headers={
+                            "Authorization": f"Bearer {token}",
+                            "Content-Type": thumb_file.content_type,
+                        },
+                        data=content,
+                    )
+                except Exception:
+                    pass
 
         if not resp.ok:
             error_msg = resp.json().get("error", {}).get("message", f"שגיאה ({resp.status_code})")

@@ -86,14 +86,17 @@ def get_credentials():
 
 def _save_credentials(credentials):
     """Save credentials for reuse."""
+    existing = config.load_token_data() or {}
     token_data = {
         "token": credentials.token,
-        "refresh_token": credentials.refresh_token,
+        "refresh_token": credentials.refresh_token or existing.get("refresh_token"),
         "token_uri": credentials.token_uri,
         "client_id": credentials.client_id,
         "client_secret": credentials.client_secret,
         "scopes": credentials.scopes and list(credentials.scopes),
     }
+    if credentials.expiry:
+        token_data["expiry"] = credentials.expiry.isoformat()
     config.save_token_data(token_data)
 
 

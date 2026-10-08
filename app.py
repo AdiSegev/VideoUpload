@@ -150,7 +150,7 @@ def set_thumbnail():
     try:
         content = thumb_file.read()
         resp = http_requests.post(
-            f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+            f"https://youtube.googleapis.com/upload/youtube/v3/thumbnails/set",
             params={"videoId": video_id, "uploadType": "media"},
             headers={
                 "Authorization": f"Bearer {token}",
@@ -169,7 +169,7 @@ def set_thumbnail():
                     auth._save_credentials(creds)
                     token = creds.token
                     resp = http_requests.post(
-                        f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+                        f"https://youtube.googleapis.com/upload/youtube/v3/thumbnails/set",
                         params={"videoId": video_id, "uploadType": "media"},
                         headers={
                             "Authorization": f"Bearer {token}",

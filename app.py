@@ -147,44 +147,59 @@ def set_thumbnail():
 
     thumb_file = request.files["thumbnail"]
 
+    import time
+    from google.auth.transport.requests import Request
+
     try:
         content = thumb_file.read()
-        resp = http_requests.post(
-            f"https://youtube.googleapis.com/upload/youtube/v3/thumbnails/set",
-            params={"videoId": video_id, "uploadType": "media"},
-            headers={
-                "Authorization": f"Bearer {token}",
-                "Content-Type": thumb_file.content_type,
-            },
-            data=content,
-        )
+        content_type = thumb_file.content_type or "image/jpeg"
 
-        # If token expired during upload, refresh and retry once
-        if resp.status_code == 401:
-            creds = auth.get_credentials()
-            if creds:
-                from google.auth.transport.requests import Request
-                try:
-                    creds.refresh(Request())
-                    auth._save_credentials(creds)
-                    token = creds.token
-                    resp = http_requests.post(
-                        f"https://youtube.googleapis.com/upload/youtube/v3/thumbnails/set",
-                        params={"videoId": video_id, "uploadType": "media"},
-                        headers={
-                            "Authorization": f"Bearer {token}",
-                            "Content-Type": thumb_file.content_type,
-                        },
-                        data=content,
-                    )
-                except Exception:
-                    pass
+        # A freshly uploaded video is not immediately available, and YouTube
+        # answers thumbnails.set on it with 401/404/5xx. Retry with backoff.
+        delays = [0, 3, 5, 8, 12, 15]
+        resp = None
+        for i, delay in enumerate(delays):
+            if delay:
+                time.sleep(delay)
 
-        if not resp.ok:
-            error_msg = resp.json().get("error", {}).get("message", f"שגיאה ({resp.status_code})")
-            return jsonify({"error": error_msg}), resp.status_code
+            # Force a fresh token on retries after an auth error
+            if i > 0 and resp is not None and resp.status_code == 401:
+                creds = auth.get_credentials()
+                if creds and creds.refresh_token:
+                    try:
+                        creds.refresh(Request())
+                        auth._save_credentials(creds)
+                        token = creds.token
+                    except Exception as refresh_err:
+                        app.logger.warning("Token refresh failed: %s", refresh_err)
 
-        return jsonify({"success": True})
+            resp = http_requests.post(
+                "https://www.googleapis.com/upload/youtube/v3/thumbnails/set",
+                params={"videoId": video_id, "uploadType": "media"},
+                headers={
+                    "Authorization": f"Bearer {token}",
+                    "Content-Type": content_type,
+                },
+                data=content,
+                timeout=30,
+            )
+            if resp.ok:
+                return jsonify({"success": True})
+
+            app.logger.warning(
+                "thumbnails.set attempt %d failed (%d): %s",
+                i + 1, resp.status_code, resp.text[:500],
+            )
+            if resp.status_code not in (401, 404, 409, 500, 502, 503):
+                break
+
+        try:
+            error_msg = resp.json().get("error", {}).get("message")
+        except Exception:
+            error_msg = None
+        error_msg = error_msg or f"שגיאה ({resp.status_code})"
+        # Don't return 401 to the browser - the user IS logged in
+        return jsonify({"error": error_msg}), 502
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
